@@ -11,9 +11,7 @@ const getUserProfile = async (req, res) => {
   try {
     const userId = req.user.id;
 
-    // 查詢用戶基本資料、配額和訂閱
     const userProfile = await db.select({
-      // 用戶基本資料
       id: usersTable.id,
       username: usersTable.username,
       email: usersTable.email,
@@ -22,7 +20,6 @@ const getUserProfile = async (req, res) => {
       isVerifiedEmail: usersTable.isVerifiedEmail,
       createdAt: usersTable.createdAt,
       
-      // 配額資訊
       totalQuota: userQuotasTable.totalQuota,
       usedQuota: userQuotasTable.usedQuota,
       remainingQuota: userQuotasTable.remainingQuota
@@ -80,7 +77,6 @@ const getUserProfile = async (req, res) => {
 // 取得用戶統計資料
 const getUserStats = async (userId) => {
   try {
-    // 短網址統計
     const urlStats = await db.select({
       totalUrls: sql`count(*)`,
       totalClicks: sql`sum(${urlsTable.clickCount})`
@@ -91,7 +87,6 @@ const getUserStats = async (userId) => {
       eq(urlsTable.isActive, true)
     ));
 
-    // 自訂域名統計
     const domainStats = await db.select({
       totalDomains: sql`count(*)`
     })
@@ -202,7 +197,6 @@ const getUserDomains = async (req, res) => {
   try {
     const userId = req.user.id;
 
-    // 檢查用戶是否有自訂域名訂閱
     const hasSubscription = await checkCustomDomainSubscription(userId);
     
     if (!hasSubscription) {
@@ -242,7 +236,6 @@ const addCustomDomain = async (req, res) => {
     const { domain } = req.body;
     const userId = req.user.id;
 
-    // 驗證必要欄位
     if (!domain) {
       return res.status(400).json({
         success: false,
@@ -250,7 +243,6 @@ const addCustomDomain = async (req, res) => {
       });
     }
 
-    // 檢查用戶是否有自訂域名訂閱
     const hasSubscription = await checkCustomDomainSubscription(userId);
     
     if (!hasSubscription) {
@@ -261,7 +253,6 @@ const addCustomDomain = async (req, res) => {
       });
     }
 
-    // 簡單的域名格式驗證
     const domainRegex = /^(?!\-)([a-zA-Z0-9\-]{1,63}\.)+[a-zA-Z]{2,}$/;
     if (!domainRegex.test(domain)) {
       return res.status(400).json({
@@ -270,7 +261,6 @@ const addCustomDomain = async (req, res) => {
       });
     }
 
-    // 檢查域名是否已被使用
     const existingDomains = await db.select()
       .from(customDomainsTable)
       .where(and(
@@ -286,7 +276,6 @@ const addCustomDomain = async (req, res) => {
       });
     }
 
-    // 新增域名
     const newDomain = await db.insert(customDomainsTable).values({
       userId,
       domain,
@@ -308,7 +297,69 @@ const addCustomDomain = async (req, res) => {
   }
 };
 
-// 輔助函數：取得訂閱類型文字
+// 刪除自訂域名
+const deleteCustomDomain = async (req, res) => {
+  try {
+    const { domainId } = req.params;
+    const userId = req.user.id;
+
+    const existingDomains = await db.select()
+      .from(customDomainsTable)
+      .where(and(
+        eq(customDomainsTable.id, domainId),
+        eq(customDomainsTable.userId, userId),
+        eq(customDomainsTable.isActive, true)
+      ))
+      .limit(1);
+
+    if (existingDomains.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: '找不到該自訂域名'
+      });
+    }
+
+    await db.update(customDomainsTable)
+      .set({
+        isActive: false
+      })
+      .where(eq(customDomainsTable.id, domainId));
+
+    res.json({
+      success: true,
+      message: '自訂域名刪除成功'
+    });
+
+  } catch (error) {
+    console.error('[USER] 刪除自訂域名失敗:', error);
+    res.status(500).json({
+      success: false,
+      message: '刪除自訂域名失敗，請稍後再試'
+    });
+  }
+};
+
+// 檢查用戶是否有自訂域名訂閱
+const checkCustomDomainSubscription = async (userId) => {
+  try {
+    const subscriptions = await db.select()
+      .from(userSubscriptionsTable)
+      .where(and(
+        eq(userSubscriptionsTable.userId, userId),
+        eq(userSubscriptionsTable.subscriptionStatus, 'active')
+      ));
+
+    return subscriptions.some(sub => 
+      (sub.subscriptionType === 'custom_domain' || sub.subscriptionType === 'custom_domain_yearly') &&
+      new Date(sub.endDate) > new Date()
+    );
+  } catch (error) {
+    console.error('[USER] 檢查訂閱狀態失敗:', error);
+    return false;
+  }
+};
+
+// 取得訂閱類型文字
 const getSubscriptionTypeText = (type) => {
   const typeMap = {
     'custom_domain': '自訂域名（月費）',
@@ -317,7 +368,7 @@ const getSubscriptionTypeText = (type) => {
   return typeMap[type] || type;
 };
 
-// 輔助函數：取得訂閱狀態文字
+// 取得訂閱狀態文字
 const getSubscriptionStatusText = (status) => {
   const statusMap = {
     'active': '使用中',
@@ -332,5 +383,6 @@ export {
   getUserQuota,
   getUserSubscriptions,
   getUserDomains,
-  addCustomDomain
+  addCustomDomain,
+  deleteCustomDomain
 };
