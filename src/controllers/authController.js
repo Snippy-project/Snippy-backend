@@ -11,7 +11,6 @@ const register = async (req, res) => {
   try {
     const { username, email, password, phone } = req.body;
 
-    // 基本驗證
     if (!username || !email || !password) {
       return res.status(400).json({
         success: false,
@@ -26,7 +25,6 @@ const register = async (req, res) => {
       });
     }
 
-    // 檢查用戶是否已存在
     const [existingUser] = await db.select()
       .from(usersTable)
       .where(eq(usersTable.email, email))
@@ -39,10 +37,8 @@ const register = async (req, res) => {
       });
     }
 
-    // 加密密碼
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // 創建用戶
     const [newUser] = await db.insert(usersTable).values({
       username,
       email,
@@ -59,7 +55,6 @@ const register = async (req, res) => {
       role: usersTable.role,
     });
 
-    // 初始化用戶配額
     await db.insert(userQuotasTable).values({
       userId: newUser.id,
       totalQuota: 20,
@@ -67,11 +62,9 @@ const register = async (req, res) => {
       remainingQuota: 20
     });
 
-    // 發送驗證信
     const emailResult = await sendVerificationEmail(newUser.email, newUser.username);
     
     if (emailResult.success) {
-      // 更新用戶的驗證 token
       await db.update(usersTable)
         .set({
           emailVerificationToken: emailResult.token,
@@ -108,7 +101,6 @@ const login = async (req, res) => {
   try {
     const { email, password, rememberMe } = req.body;
 
-    // 基本驗證
     if (!email || !password) {
       return res.status(400).json({
         success: false,
@@ -116,7 +108,6 @@ const login = async (req, res) => {
       });
     }
 
-    // 查詢用戶
     const [user] = await db.select()
       .from(usersTable)
       .where(eq(usersTable.email, email))
@@ -129,7 +120,6 @@ const login = async (req, res) => {
       });
     }
 
-    // 驗證密碼
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
       return res.status(401).json({
@@ -138,7 +128,6 @@ const login = async (req, res) => {
       });
     }
 
-    // 使用 authService 處理登入
     const loginResult = await loginUser(res, user, { rememberMe });
 
     if (loginResult.success) {
@@ -182,7 +171,6 @@ const verifyEmail = async (req, res) => {
       });
     }
 
-    // 查詢用戶
     const [user] = await db.select()
       .from(usersTable)
       .where(and(
@@ -198,7 +186,6 @@ const verifyEmail = async (req, res) => {
       });
     }
 
-    // 更新用戶驗證狀態
     await db.update(usersTable)
       .set({
         isVerifiedEmail: true,
@@ -239,7 +226,6 @@ const resendVerification = async (req, res) => {
       });
     }
 
-    // 查詢用戶
     const [user] = await db.select()
       .from(usersTable)
       .where(eq(usersTable.email, email))
@@ -268,11 +254,9 @@ const resendVerification = async (req, res) => {
       });
     }
 
-    // 發送驗證信
     const emailResult = await sendVerificationEmail(user.email, user.username);
 
     if (emailResult.success) {
-      // 更新用戶的驗證 token
       await db.update(usersTable)
         .set({
           emailVerificationToken: emailResult.token,
@@ -313,21 +297,18 @@ const forgotPassword = async (req, res) => {
       });
     }
 
-    // 查詢用戶
     const [user] = await db.select()
       .from(usersTable)
       .where(eq(usersTable.email, email))
       .limit(1);
 
     if (!user) {
-      // 為了安全，不透露用戶是否存在
       return res.json({
         success: true,
         message: '如果此信箱存在，您將收到密碼重設信件'
       });
     }
 
-    // 檢查是否過於頻繁發送（5分鐘內只能發送一次）
     const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
     if (user.lastPasswordResetSent && user.lastPasswordResetSent > fiveMinutesAgo) {
       return res.status(429).json({
@@ -336,11 +317,9 @@ const forgotPassword = async (req, res) => {
       });
     }
 
-    // 發送重設信
     const emailResult = await sendPasswordResetEmail(user.email, user.username);
 
     if (emailResult.success) {
-      // 更新用戶的重設 token
       await db.update(usersTable)
         .set({
           passwordResetToken: emailResult.token,
@@ -384,7 +363,6 @@ const resetPassword = async (req, res) => {
       });
     }
 
-    // 查詢用戶
     const [user] = await db.select()
       .from(usersTable)
       .where(and(
@@ -400,10 +378,8 @@ const resetPassword = async (req, res) => {
       });
     }
 
-    // 加密新密碼
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // 更新用戶密碼
     await db.update(usersTable)
       .set({
         password: hashedPassword,
@@ -435,7 +411,6 @@ const me = async (req, res) => {
       return res.status(401).json(authResult);
     }
 
-    // 查詢用戶完整資料和配額
     const [user] = await db.select({
       id: usersTable.id,
       username: usersTable.username,

@@ -19,7 +19,6 @@ const getProducts = async (req, res) => {
     .where(eq(productsTable.isActive, true))
     .orderBy(productsTable.productType, productsTable.price);
 
-    // 格式化價格顯示
     const formattedProducts = products.map(product => ({
       ...product,
       priceDisplay: `$${(product.price / 100).toFixed(2)}`,
@@ -87,7 +86,6 @@ const createProduct = async (req, res) => {
   try {
     const { name, description, quotaAmount, price, productType, subscriptionDurationDays } = req.body;
 
-    // 驗證必要欄位
     if (!name || !description || price === undefined || !productType) {
       return res.status(400).json({
         success: false,
@@ -95,7 +93,6 @@ const createProduct = async (req, res) => {
       });
     }
 
-    // 驗證商品類型
     const validTypes = ['quota', 'custom_domain', 'custom_domain_yearly'];
     if (!validTypes.includes(productType)) {
       return res.status(400).json({
@@ -104,7 +101,6 @@ const createProduct = async (req, res) => {
       });
     }
 
-    // 驗證價格
     if (price < 0) {
       return res.status(400).json({
         success: false,
@@ -144,7 +140,6 @@ const updateProduct = async (req, res) => {
     const { id } = req.params;
     const { name, description, quotaAmount, price, productType, isActive, subscriptionDurationDays } = req.body;
 
-    // 檢查商品是否存在
     const [existingProducts] = await db.select()
       .from(productsTable)
       .where(eq(productsTable.id, id))
@@ -157,7 +152,6 @@ const updateProduct = async (req, res) => {
       });
     }
 
-    // 準備更新資料
     const updateData = {};
     if (name !== undefined) updateData.name = name;
     if (description !== undefined) updateData.description = description;
@@ -168,7 +162,6 @@ const updateProduct = async (req, res) => {
     if (subscriptionDurationDays !== undefined) updateData.subscriptionDurationDays = subscriptionDurationDays;
     updateData.updatedAt = new Date();
 
-    // 更新商品
     await db.update(productsTable)
       .set(updateData)
       .where(eq(productsTable.id, id));
@@ -192,7 +185,6 @@ const deleteProduct = async (req, res) => {
   try {
     const { id } = req.params;
 
-    // 檢查商品是否存在
     const [existingProducts] = await db.select()
       .from(productsTable)
       .where(eq(productsTable.id, id))
@@ -205,7 +197,6 @@ const deleteProduct = async (req, res) => {
       });
     }
 
-    // 軟刪除商品
     await db.update(productsTable)
       .set({
         isActive: false,
@@ -255,11 +246,73 @@ const getAllProducts = async (req, res) => {
   }
 };
 
+// 取得商品特色
+const getProductFeatures = (product) => {
+  const features = [];
+  
+  switch (product.productType) {
+    case 'quota':
+      features.push(`增加 ${product.quotaAmount} 次使用額度`);
+      features.push('永久有效');
+      features.push('立即生效');
+      break;
+      
+    case 'custom_domain':
+      features.push('啟用自訂域名功能');
+      features.push('月費制，彈性付費');
+      features.push('專業品牌形象');
+      features.push('無限制短網址數量');
+      break;
+      
+    case 'custom_domain_yearly':
+      features.push('啟用自訂域名功能');
+      features.push('年費制，更划算');
+      features.push('專業品牌形象');
+      features.push('無限制短網址數量');
+      features.push('比月費省更多');
+      break;
+      
+    default:
+      features.push('特殊商品');
+  }
+  
+  return features;
+};
+
+// 商品統計（管理員）
+const getProductStats = async (req, res) => {
+  try {
+    const stats = {
+      totalProducts: await db.select().from(productsTable).then(rows => rows.length),
+      activeProducts: await db.select().from(productsTable).where(eq(productsTable.isActive, true)).then(rows => rows.length),
+      productTypes: {
+        quota: await db.select().from(productsTable).where(eq(productsTable.productType, 'quota')).then(rows => rows.length),
+        custom_domain: await db.select().from(productsTable).where(eq(productsTable.productType, 'custom_domain')).then(rows => rows.length),
+        custom_domain_yearly: await db.select().from(productsTable).where(eq(productsTable.productType, 'custom_domain_yearly')).then(rows => rows.length)
+      }
+    };
+
+    res.json({
+      success: true,
+      data: stats,
+      message: '商品統計取得成功'
+    });
+
+  } catch (error) {
+    console.error('[PRODUCT] 取得商品統計失敗:', error);
+    res.status(500).json({
+      success: false,
+      message: '取得商品統計失敗，請稍後再試'
+    });
+  }
+};
+
 export {
   getProducts,
   getProductById,
   createProduct,
   updateProduct,
   deleteProduct,
-  getAllProducts
+  getAllProducts,
+  getProductStats
 };

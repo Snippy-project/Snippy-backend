@@ -11,7 +11,6 @@ const createUrl = async (req, res) => {
     const { originalUrl, title, customDomainId } = req.body;
     const userId = req.user.id;
 
-    // 驗證必要欄位
     if (!originalUrl) {
       return res.status(400).json({
         success: false,
@@ -19,7 +18,6 @@ const createUrl = async (req, res) => {
       });
     }
 
-    // 檢查用戶配額
     const quota = await db.select()
       .from(userQuotasTable)
       .where(eq(userQuotasTable.userId, userId))
@@ -33,7 +31,6 @@ const createUrl = async (req, res) => {
       });
     }
 
-    // 驗證 URL 格式
     const urlValidation = validateUrl(originalUrl);
     if (!urlValidation.valid) {
       return res.status(400).json({
@@ -42,7 +39,6 @@ const createUrl = async (req, res) => {
       });
     }
 
-    // 檢查 URL 安全性
     const safetyCheck = checkUrlSafety(urlValidation.url);
     if (!safetyCheck.safe) {
       return res.status(400).json({
@@ -51,7 +47,6 @@ const createUrl = async (req, res) => {
       });
     }
 
-    // 檢查自訂域名權限
     let customDomain = null;
     if (customDomainId) {
       const domains = await db.select()
@@ -72,13 +67,12 @@ const createUrl = async (req, res) => {
       customDomain = domains[0];
     }
 
-    // 生成唯一的 shortId
+    // 生成 shortId
     const shortId = await generateUniqueShortId();
 
-    // 獲取網頁標題（如果沒有提供）
     const finalTitle = title || await getUrlTitle(urlValidation.url);
 
-    // 創建短網址記錄
+    // 創建短網址
     const newUrl = await db.insert(urlsTable).values({
       userId,
       shortId,
@@ -89,7 +83,7 @@ const createUrl = async (req, res) => {
       isActive: true
     }).returning();
 
-    // 扣除用戶配額
+    // 扣除額度
     await db.update(userQuotasTable)
       .set({
         usedQuota: sql`used_quota + 1`,
@@ -97,7 +91,6 @@ const createUrl = async (req, res) => {
       })
       .where(eq(userQuotasTable.userId, userId));
 
-    // 建構短網址
     const shortUrl = buildShortUrl(shortId, customDomain?.domain);
 
     res.status(201).json({
@@ -128,7 +121,7 @@ const createUrl = async (req, res) => {
   }
 };
 
-// 取得用戶的短網址列表
+// 取得用戶的短網址
 const getUserUrls = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -136,7 +129,6 @@ const getUserUrls = async (req, res) => {
     const limit = parseInt(req.query.limit) || 5;
     const offset = (page - 1) * limit;
 
-    // 查詢短網址列表
     const urls = await db.select({
       id: urlsTable.id,
       shortId: urlsTable.shortId,
@@ -158,7 +150,6 @@ const getUserUrls = async (req, res) => {
     .limit(limit)
     .offset(offset);
 
-    // 計算總數
     const totalCount = await db.select({ 
       count: sql`count(*)` 
     })
@@ -168,7 +159,6 @@ const getUserUrls = async (req, res) => {
       eq(urlsTable.isActive, true)
     ));
 
-    // 為每個 URL 加上完整的短網址
     const urlsWithShortUrl = urls.map(url => ({
       ...url,
       shortUrl: buildShortUrl(url.shortId, url.customDomain)
@@ -194,7 +184,7 @@ const getUserUrls = async (req, res) => {
   }
 };
 
-// 取得特定短網址詳情
+// 取得特定短網址
 const getUrlById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -254,7 +244,6 @@ const updateUrl = async (req, res) => {
     const { title } = req.body;
     const userId = req.user.id;
 
-    // 檢查短網址是否存在且屬於當前用戶
     const existingUrls = await db.select()
       .from(urlsTable)
       .where(and(
@@ -271,7 +260,6 @@ const updateUrl = async (req, res) => {
       });
     }
 
-    // 更新短網址
     await db.update(urlsTable)
       .set({
         title: title || existingUrls[0].title,
@@ -299,7 +287,6 @@ const deleteUrl = async (req, res) => {
     const { id } = req.params;
     const userId = req.user.id;
 
-    // 檢查短網址是否存在且屬於當前用戶
     const existingUrls = await db.select()
       .from(urlsTable)
       .where(and(
@@ -316,7 +303,6 @@ const deleteUrl = async (req, res) => {
       });
     }
 
-    // 軟刪除
     await db.update(urlsTable)
       .set({
         isActive: false
@@ -337,12 +323,11 @@ const deleteUrl = async (req, res) => {
   }
 };
 
-// 短網址重定向
+// 短網址重導
 const handleRedirect = async (req, res) => {
   try {
     const { shortId } = req.params;
 
-    // 查詢短網址
     const urls = await db.select()
       .from(urlsTable)
       .where(and(
@@ -360,7 +345,6 @@ const handleRedirect = async (req, res) => {
 
     const url = urls[0];
 
-    // 檢查是否過期
     if (url.expiresAt && new Date() > url.expiresAt) {
       return res.status(410).json({
         success: false,
@@ -375,14 +359,13 @@ const handleRedirect = async (req, res) => {
       })
       .where(eq(urlsTable.id, url.id));
 
-    // 重定向到原始網址
     res.redirect(301, url.originalUrl);
 
   } catch (error) {
-    console.error('[URL] 短網址重定向失敗:', error);
+    console.error('[URL] 短網址重導失敗:', error);
     res.status(500).json({
       success: false,
-      message: '重定向失敗，請稍後再試'
+      message: '重導失敗，請稍後再試'
     });
   }
 };
