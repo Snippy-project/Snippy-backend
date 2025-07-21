@@ -4,7 +4,7 @@ import { ordersTable } from '../models/products/ordersTable.js';
 import { productsTable } from '../models/products/productsTable.js';
 import { userQuotasTable } from '../models/users/userQuotasTable.js';
 import { userSubscriptionsTable } from '../models/users/userSubscriptionsTable.js';
-import { generatePaymentFormHTML, verifyEcpayCallback } from '../services/ecpay/ecpayService.js';
+import { generatePaymentFormHTML, verifyEcpayCallback, simulatePayment } from '../services/ecpay/ecpayService.js';
 
 // 創建訂單
 const createOrder = async (req, res) => {
@@ -341,9 +341,68 @@ const getUserOrders = async (req, res) => {
   }
 };
 
+// 取得特定訂單詳情
+const getOrderById = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const userId = req.user.id;
+
+    const orders = await db.select({
+      id: ordersTable.id,
+      orderNumber: ordersTable.orderNumber,
+      price: ordersTable.price,
+      orderStatus: ordersTable.orderStatus,
+      ecpayTradeNo: ordersTable.ecpayTradeNo,
+      ecpayPaymentDate: ordersTable.ecpayPaymentDate,
+      failureReason: ordersTable.failureReason,
+      paidAt: ordersTable.paidAt,
+      createdAt: ordersTable.createdAt,
+      productName: productsTable.name,
+      productDescription: productsTable.description,
+      productType: productsTable.productType,
+      quotaAmount: productsTable.quotaAmount
+    })
+    .from(ordersTable)
+    .leftJoin(productsTable, eq(ordersTable.productId, productsTable.id))
+    .where(and(
+      eq(ordersTable.id, orderId),
+      eq(ordersTable.userId, userId)
+    ))
+    .limit(1);
+
+    if (orders.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: '找不到該訂單'
+      });
+    }
+
+    const order = orders[0];
+
+    res.json({
+      success: true,
+      data: {
+        ...order,
+        priceDisplay: `$${(order.price / 100).toFixed(2)}`,
+        statusText: getOrderStatusText(order.orderStatus),
+        canPay: order.orderStatus === 'pending',
+        paymentUrl: order.orderStatus === 'pending' ? `/api/orders/${order.id}/payment` : null
+      }
+    });
+
+  } catch (error) {
+    console.error('[ORDER] 取得訂單詳情失敗:', error);
+    res.status(500).json({
+      success: false,
+      message: '取得訂單詳情失敗，請稍後再試'
+    });
+  }
+};
+
 export {
   createOrder,
   getPaymentPage,
   handlePaymentCallback,
-  getUserOrders
+  getUserOrders,
+  getOrderById
 };
