@@ -41,6 +41,48 @@ const getProducts = async (req, res) => {
   }
 };
 
+// 取得特定商品詳情
+const getProductById = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const products = await db.select()
+      .from(productsTable)
+      .where(and(
+        eq(productsTable.id, id),
+        eq(productsTable.isActive, true)
+      ))
+      .limit(1);
+
+    if (products.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: '找不到該商品'
+      });
+    }
+
+    const product = products[0];
+
+    res.json({
+      success: true,
+      data: {
+        ...product,
+        priceDisplay: `$${(product.price / 100).toFixed(2)}`,
+        features: getProductFeatures(product)
+      },
+      message: '商品詳情取得成功'
+    });
+
+  } catch (error) {
+    console.error('[PRODUCT] 取得商品詳情失敗:', error);
+    res.status(500).json({
+      success: false,
+      message: '取得商品詳情失敗，請稍後再試'
+    });
+  }
+};
+
 export {
-  getProducts
+  getProducts,
+  getProductById
 };
