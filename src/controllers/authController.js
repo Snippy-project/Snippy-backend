@@ -301,10 +301,74 @@ const resendVerification = async (req, res) => {
   }
 };
 
+// 忘記密碼
+const forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: '請提供信箱'
+      });
+    }
+
+    // 查詢用戶
+    const [user] = await db.select()
+      .from(usersTable)
+      .where(eq(usersTable.email, email))
+      .limit(1);
+
+    if (!user) {
+      // 為了安全，不透露用戶是否存在
+      return res.json({
+        success: true,
+        message: '如果此信箱存在，您將收到密碼重設信件'
+      });
+    }
+
+    // 檢查是否過於頻繁發送（5分鐘內只能發送一次）
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+    if (user.lastPasswordResetSent && user.lastPasswordResetSent > fiveMinutesAgo) {
+      return res.status(429).json({
+        success: false,
+        message: '請等待5分鐘後再重新發送重設信'
+      });
+    }
+
+    // 發送重設信
+    const emailResult = await sendPasswordResetEmail(user.email, user.username);
+
+    if (emailResult.success) {
+      // 更新用戶的重設 token
+      await db.update(usersTable)
+        .set({
+          passwordResetToken: emailResult.token,
+          passwordResetExpires: new Date(Date.now() + 60 * 60 * 1000), // 1小時
+          lastPasswordResetSent: new Date()
+        })
+        .where(eq(usersTable.id, user.id));
+    }
+
+    res.json({
+      success: true,
+      message: '如果此信箱存在，您將收到密碼重設信件'
+    });
+
+  } catch (error) {
+    console.error('[AUTH] 忘記密碼處理失敗:', error);
+    res.status(500).json({
+      success: false,
+      message: '處理失敗，請稍後再試'
+    });
+  }
+};
+
 export {
   register,
   login,
   logout,
   verifyEmail,
-  resendVerification
+  resendVerification,
+  forgotPassword
 };
