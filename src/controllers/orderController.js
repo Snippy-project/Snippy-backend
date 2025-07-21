@@ -98,6 +98,81 @@ const createOrder = async (req, res) => {
   }
 };
 
+// 取得付款頁面
+const getPaymentPage = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const userId = req.user.id;
+
+    // 查詢訂單
+    const orders = await db.select({
+      id: ordersTable.id,
+      orderNumber: ordersTable.orderNumber,
+      price: ordersTable.price,
+      orderStatus: ordersTable.orderStatus,
+      productName: productsTable.name,
+      productDescription: productsTable.description
+    })
+    .from(ordersTable)
+    .leftJoin(productsTable, eq(ordersTable.productId, productsTable.id))
+    .where(and(
+      eq(ordersTable.id, orderId),
+      eq(ordersTable.userId, userId)
+    ))
+    .limit(1);
+
+    if (orders.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: '找不到該訂單'
+      });
+    }
+
+    const order = orders[0];
+
+    // 檢查訂單狀態
+    if (order.orderStatus !== 'pending') {
+      return res.status(400).json({
+        success: false,
+        message: '訂單狀態不允許付款',
+        status: order.orderStatus
+      });
+    }
+
+    // 準備付款資料
+    const paymentData = {
+      orderNumber: order.orderNumber,
+      totalAmount: order.price,
+      itemName: order.productName,
+      returnUrl: `${process.env.BACKEND_URL}/api/orders/payment/callback`,
+      clientBackUrl: `${process.env.FRONTEND_URL}/orders/${order.id}`,
+      orderResultUrl: `${process.env.FRONTEND_URL}/orders/${order.id}/result`
+    };
+
+    // 生成綠界付款表單
+    const paymentForm = generatePaymentFormHTML(paymentData);
+
+    if (!paymentForm.success) {
+      return res.status(500).json({
+        success: false,
+        message: '建立付款表單失敗'
+      });
+    }
+
+    // 回傳 HTML 付款頁面
+    res.setHeader('Content-Type', 'text/html');
+    res.send(paymentForm.html);
+
+  } catch (error) {
+    console.error('[ORDER] 取得付款頁面失敗:', error);
+    res.status(500).json({
+      success: false,
+      message: '取得付款頁面失敗，請稍後再試'
+    });
+  }
+};
+
 export {
-  createOrder
+  createOrder,
+  getPaymentPage
 };
