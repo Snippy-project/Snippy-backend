@@ -12,7 +12,6 @@ const createOrder = async (req, res) => {
     const { productId } = req.body;
     const userId = req.user.id;
 
-    // 驗證必要欄位
     if (!productId) {
       return res.status(400).json({
         success: false,
@@ -20,7 +19,6 @@ const createOrder = async (req, res) => {
       });
     }
 
-    // 查詢商品資訊
     const products = await db.select()
       .from(productsTable)
       .where(and(
@@ -41,7 +39,6 @@ const createOrder = async (req, res) => {
     // 生成訂單編號
     const orderNumber = `ORDER-${Date.now()}-${userId}`;
 
-    // 建立訂單
     const newOrder = await db.insert(ordersTable).values({
       userId,
       productId,
@@ -52,7 +49,6 @@ const createOrder = async (req, res) => {
 
     const order = newOrder[0];
 
-    // 準備付款資料
     const paymentData = {
       orderNumber: orderNumber,
       totalAmount: product.price,
@@ -62,7 +58,6 @@ const createOrder = async (req, res) => {
       orderResultUrl: `${process.env.FRONTEND_URL}/orders/${order.id}/result`
     };
 
-    // 生成綠界付款表單
     const paymentForm = generatePaymentFormHTML(paymentData);
 
     if (!paymentForm.success) {
@@ -106,7 +101,6 @@ const getPaymentPage = async (req, res) => {
     const { orderId } = req.params;
     const userId = req.user.id;
 
-    // 查詢訂單
     const orders = await db.select({
       id: ordersTable.id,
       orderNumber: ordersTable.orderNumber,
@@ -141,7 +135,6 @@ const getPaymentPage = async (req, res) => {
       });
     }
 
-    // 準備付款資料
     const paymentData = {
       orderNumber: order.orderNumber,
       totalAmount: order.price,
@@ -151,7 +144,6 @@ const getPaymentPage = async (req, res) => {
       orderResultUrl: `${process.env.FRONTEND_URL}/orders/${order.id}/result`
     };
 
-    // 生成綠界付款表單
     const paymentForm = generatePaymentFormHTML(paymentData);
 
     if (!paymentForm.success) {
@@ -161,7 +153,6 @@ const getPaymentPage = async (req, res) => {
       });
     }
 
-    // 回傳 HTML 付款頁面
     res.setHeader('Content-Type', 'text/html');
     res.send(paymentForm.html);
 
@@ -179,7 +170,6 @@ const handlePaymentCallback = async (req, res) => {
   try {
     console.log('[ORDER] 收到綠界付款回調');
     
-    // 處理綠界回傳資料
     const callbackResult = verifyEcpayCallback(req.body);
     
     if (!callbackResult.success) {
@@ -190,7 +180,6 @@ const handlePaymentCallback = async (req, res) => {
     const { result } = callbackResult;
     const { merchantTradeNo } = result;
 
-    // 查詢對應的訂單
     const orders = await db.select()
       .from(ordersTable)
       .leftJoin(productsTable, eq(ordersTable.productId, productsTable.id))
@@ -205,7 +194,6 @@ const handlePaymentCallback = async (req, res) => {
     const order = orders[0].orders;
     const product = orders[0].products;
 
-    // 更新訂單狀態
     if (callbackResult.success) {
       await db.update(ordersTable)
         .set({
@@ -218,7 +206,6 @@ const handlePaymentCallback = async (req, res) => {
         })
         .where(eq(ordersTable.id, order.id));
 
-      // 處理訂單完成後的業務邏輯
       await processOrderCompletion(order, product);
 
       console.log('[ORDER] 訂單付款成功:', merchantTradeNo);
@@ -248,7 +235,6 @@ const processOrderCompletion = async (order, product) => {
     console.log('[ORDER] 開始處理訂單完成邏輯:', order.orderNumber);
 
     if (product.productType === 'quota') {
-      // 配額商品：增加用戶配額
       await db.update(userQuotasTable)
         .set({
           totalQuota: sql`total_quota + ${product.quotaAmount}`,
@@ -259,7 +245,6 @@ const processOrderCompletion = async (order, product) => {
       console.log(`[ORDER] 用戶 ${order.userId} 增加配額 ${product.quotaAmount}`);
 
     } else if (product.productType === 'custom_domain' || product.productType === 'custom_domain_yearly') {
-      // 自訂域名商品：創建訂閱記錄
       const endDate = new Date();
       endDate.setDate(endDate.getDate() + product.subscriptionDurationDays);
 
@@ -276,7 +261,6 @@ const processOrderCompletion = async (order, product) => {
 
   } catch (error) {
     console.error('[ORDER] 處理訂單完成邏輯失敗:', error);
-    // 這裡可以加入重試機制或告警
   }
 };
 
@@ -307,14 +291,12 @@ const getUserOrders = async (req, res) => {
     .limit(limit)
     .offset(offset);
 
-    // 計算總數
     const totalCount = await db.select({ 
       count: sql`count(*)` 
     })
     .from(ordersTable)
     .where(eq(ordersTable.userId, userId));
 
-    // 格式化訂單資料
     const formattedOrders = orders.map(order => ({
       ...order,
       priceDisplay: `$${(order.price / 100).toFixed(2)}`,
@@ -399,10 +381,88 @@ const getOrderById = async (req, res) => {
   }
 };
 
+// 測試付款（僅開發環境）
+const simulatePaymentSuccess = async (req, res) => {
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(403).json({
+      success: false,
+      message: '生產環境不允許模擬付款'
+    });
+  }
+
+  try {
+    const { orderId } = req.params;
+    const userId = req.user.id;
+
+    const orders = await db.select()
+      .from(ordersTable)
+      .leftJoin(productsTable, eq(ordersTable.productId, productsTable.id))
+      .where(and(
+        eq(ordersTable.id, orderId),
+        eq(ordersTable.userId, userId),
+        eq(ordersTable.orderStatus, 'pending')
+      ))
+      .limit(1);
+
+    if (orders.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: '找不到可付款的訂單'
+      });
+    }
+
+    const order = orders[0].orders;
+    const product = orders[0].products;
+
+    const simulationResult = simulatePayment(order.orderNumber, order.price);
+
+    await db.update(ordersTable)
+      .set({
+        orderStatus: 'paid',
+        ecpayTradeNo: simulationResult.result.ecpayTradeNo,
+        ecpayPaymentDate: new Date(),
+        ecpaySimulatePaid: 1,
+        paidAt: new Date()
+      })
+      .where(eq(ordersTable.id, order.id));
+
+    await processOrderCompletion(order, product);
+
+    res.json({
+      success: true,
+      message: '模擬付款成功',
+      data: {
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        status: 'paid'
+      }
+    });
+
+  } catch (error) {
+    console.error('[ORDER] 模擬付款失敗:', error);
+    res.status(500).json({
+      success: false,
+      message: '模擬付款失敗，請稍後再試'
+    });
+  }
+};
+
+// 取得訂單狀態文字
+const getOrderStatusText = (status) => {
+  const statusMap = {
+    'pending': '待付款',
+    'paid': '已付款',
+    'failed': '付款失敗',
+    'cancelled': '已取消'
+  };
+  return statusMap[status] || '未知狀態';
+};
+
 export {
   createOrder,
   getPaymentPage,
   handlePaymentCallback,
   getUserOrders,
-  getOrderById
+  getOrderById,
+  simulatePaymentSuccess
 };
