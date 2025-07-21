@@ -138,8 +138,58 @@ const createProduct = async (req, res) => {
   }
 };
 
+// 更新商品（管理員）
+const updateProduct = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, description, quotaAmount, price, productType, isActive, subscriptionDurationDays } = req.body;
+
+    // 檢查商品是否存在
+    const [existingProducts] = await db.select()
+      .from(productsTable)
+      .where(eq(productsTable.id, id))
+      .limit(1);
+
+    if (!existingProducts) {
+      return res.status(404).json({
+        success: false,
+        message: '找不到該商品'
+      });
+    }
+
+    // 準備更新資料
+    const updateData = {};
+    if (name !== undefined) updateData.name = name;
+    if (description !== undefined) updateData.description = description;
+    if (quotaAmount !== undefined) updateData.quotaAmount = quotaAmount;
+    if (price !== undefined) updateData.price = price;
+    if (productType !== undefined) updateData.productType = productType;
+    if (isActive !== undefined) updateData.isActive = isActive;
+    if (subscriptionDurationDays !== undefined) updateData.subscriptionDurationDays = subscriptionDurationDays;
+    updateData.updatedAt = new Date();
+
+    // 更新商品
+    await db.update(productsTable)
+      .set(updateData)
+      .where(eq(productsTable.id, id));
+
+    res.json({
+      success: true,
+      message: '商品更新成功'
+    });
+
+  } catch (error) {
+    console.error('[PRODUCT] 更新商品失敗:', error);
+    res.status(500).json({
+      success: false,
+      message: '更新商品失敗，請稍後再試'
+    });
+  }
+};
+
 export {
   getProducts,
   getProductById,
-  createProduct
+  createProduct,
+  updateProduct
 };
