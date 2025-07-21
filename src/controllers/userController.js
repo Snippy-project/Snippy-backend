@@ -1,8 +1,10 @@
-import { eq, and } from 'drizzle-orm';
+import { eq, and, desc, sql } from 'drizzle-orm';
 import { db } from '../config/db.js';
 import { usersTable } from '../models/users/usersTable.js';
 import { userQuotasTable } from '../models/users/userQuotasTable.js';
 import { userSubscriptionsTable } from '../models/users/userSubscriptionsTable.js';
+import { customDomainsTable } from '../models/urls/customDomainsTable.js';
+import { urlsTable } from '../models/urls/urlsTable.js';
 
 // 取得用戶個人資料和統計
 const getUserProfile = async (req, res) => {
@@ -73,6 +75,55 @@ const getUserProfile = async (req, res) => {
       message: '取得用戶資料失敗，請稍後再試'
     });
   }
+};
+
+// 取得用戶統計資料
+const getUserStats = async (userId) => {
+  try {
+    // 短網址統計
+    const urlStats = await db.select({
+      totalUrls: sql`count(*)`,
+      totalClicks: sql`sum(${urlsTable.clickCount})`
+    })
+    .from(urlsTable)
+    .where(and(
+      eq(urlsTable.userId, userId),
+      eq(urlsTable.isActive, true)
+    ));
+
+    // 自訂域名統計
+    const domainStats = await db.select({
+      totalDomains: sql`count(*)`
+    })
+    .from(customDomainsTable)
+    .where(and(
+      eq(customDomainsTable.userId, userId),
+      eq(customDomainsTable.isActive, true)
+    ));
+
+    return {
+      totalUrls: urlStats[0]?.totalUrls || 0,
+      totalClicks: urlStats[0]?.totalClicks || 0,
+      totalDomains: domainStats[0]?.totalDomains || 0
+    };
+  } catch (error) {
+    console.error('[USER] 取得用戶統計失敗:', error);
+    return {
+      totalUrls: 0,
+      totalClicks: 0,
+      totalDomains: 0
+    };
+  }
+};
+
+// 輔助函數：取得訂閱狀態文字
+const getSubscriptionStatusText = (status) => {
+  const statusMap = {
+    'active': '使用中',
+    'expired': '已過期',
+    'cancelled': '已取消'
+  };
+  return statusMap[status] || status;
 };
 
 export {
