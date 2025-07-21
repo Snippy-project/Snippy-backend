@@ -3,8 +3,8 @@ import { eq, and, gt } from 'drizzle-orm';
 import { db } from '../config/db.js';
 import { usersTable } from '../models/users/usersTable.js';
 import { userQuotasTable } from '../models/users/userQuotasTable.js';
-import { loginUser, logoutUser, verifyAuth } from '../services/auth/authService.js';
-import { sendVerificationEmail, sendPasswordResetEmail } from '../services/auth/emailService.js';
+import { loginUser, logoutUser } from '../services/auth/authService.js';
+import { sendVerificationEmail } from '../services/auth/emailService.js';
 
 // 註冊用戶
 const register = async (req, res) => {
@@ -170,8 +170,66 @@ const logout = async (req, res) => {
   }
 };
 
+// 驗證信箱
+const verifyEmail = async (req, res) => {
+  try {
+    const { token } = req.params;
+
+    if (!token) {
+      return res.status(400).json({
+        success: false,
+        message: '驗證 token 不能為空'
+      });
+    }
+
+    // 查詢用戶
+    const [user] = await db.select()
+      .from(usersTable)
+      .where(and(
+        eq(usersTable.emailVerificationToken, token),
+        gt(usersTable.emailVerificationExpires, new Date())
+      ))
+      .limit(1);
+
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        message: '驗證 token 無效或已過期'
+      });
+    }
+
+    // 更新用戶驗證狀態
+    await db.update(usersTable)
+      .set({
+        isVerifiedEmail: true,
+        emailVerificationToken: null,
+        emailVerificationExpires: null
+      })
+      .where(eq(usersTable.id, user.id));
+
+    res.json({
+      success: true,
+      message: '信箱驗證成功！您現在可以登入使用所有功能',
+      user: {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        isVerifiedEmail: true
+      }
+    });
+
+  } catch (error) {
+    console.error('[AUTH] 信箱驗證失敗:', error);
+    res.status(500).json({
+      success: false,
+      message: '信箱驗證失敗，請稍後再試'
+    });
+  }
+};
+
 export {
   register,
   login,
-  logout
+  logout,
+  verifyEmail
 };
