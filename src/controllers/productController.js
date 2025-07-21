@@ -227,10 +227,39 @@ const deleteProduct = async (req, res) => {
   }
 };
 
+// 取得所有商品（管理員 包含停用）
+const getAllProducts = async (req, res) => {
+  try {
+    const products = await db.select()
+      .from(productsTable)
+      .orderBy(productsTable.createdAt);
+
+    const formattedProducts = products.map(product => ({
+      ...product,
+      priceDisplay: `$${(product.price / 100).toFixed(2)}`,
+      features: getProductFeatures(product)
+    }));
+
+    res.json({
+      success: true,
+      data: formattedProducts,
+      message: '所有商品列表取得成功'
+    });
+
+  } catch (error) {
+    console.error('[PRODUCT] 取得所有商品失敗:', error);
+    res.status(500).json({
+      success: false,
+      message: '取得商品列表失敗，請稍後再試'
+    });
+  }
+};
+
 export {
   getProducts,
   getProductById,
   createProduct,
   updateProduct,
-  deleteProduct
+  deleteProduct,
+  getAllProducts
 };
