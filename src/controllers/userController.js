@@ -1,4 +1,4 @@
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and, desc, sql } from 'drizzle-orm';
 import { db } from '../config/db.js';
 import { usersTable } from '../models/users/usersTable.js';
 import { userQuotasTable } from '../models/users/userQuotasTable.js';
@@ -154,6 +154,58 @@ const getUserQuota = async (req, res) => {
   }
 };
 
+// 取得用戶訂閱資訊
+const getUserSubscriptions = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const subscriptions = await db.select()
+      .from(userSubscriptionsTable)
+      .where(eq(userSubscriptionsTable.userId, userId))
+      .orderBy(desc(userSubscriptionsTable.createdAt));
+
+    const formattedSubscriptions = subscriptions.map(sub => {
+      const now = new Date();
+      const endDate = new Date(sub.endDate);
+      const daysRemaining = Math.ceil((endDate - now) / (1000 * 60 * 60 * 24));
+      
+      return {
+        id: sub.id,
+        type: sub.subscriptionType,
+        typeText: getSubscriptionTypeText(sub.subscriptionType),
+        status: sub.subscriptionStatus,
+        statusText: getSubscriptionStatusText(sub.subscriptionStatus),
+        startDate: sub.startDate,
+        endDate: sub.endDate,
+        daysRemaining: daysRemaining,
+        isActive: sub.subscriptionStatus === 'active' && daysRemaining > 0,
+        isExpiring: sub.subscriptionStatus === 'active' && daysRemaining <= 7 && daysRemaining > 0
+      };
+    });
+
+    res.json({
+      success: true,
+      data: formattedSubscriptions
+    });
+
+  } catch (error) {
+    console.error('[USER] 取得訂閱資訊失敗:', error);
+    res.status(500).json({
+      success: false,
+      message: '取得訂閱資訊失敗，請稍後再試'
+    });
+  }
+};
+
+// 輔助函數：取得訂閱類型文字
+const getSubscriptionTypeText = (type) => {
+  const typeMap = {
+    'custom_domain': '自訂域名（月費）',
+    'custom_domain_yearly': '自訂域名（年費）'
+  };
+  return typeMap[type] || type;
+};
+
 // 輔助函數：取得訂閱狀態文字
 const getSubscriptionStatusText = (status) => {
   const statusMap = {
@@ -166,5 +218,6 @@ const getSubscriptionStatusText = (status) => {
 
 export {
   getUserProfile,
-  getUserQuota
+  getUserQuota,
+  getUserSubscriptions
 };
