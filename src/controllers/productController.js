@@ -187,9 +187,50 @@ const updateProduct = async (req, res) => {
   }
 };
 
+// 刪除商品（管理員）
+const deleteProduct = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // 檢查商品是否存在
+    const [existingProducts] = await db.select()
+      .from(productsTable)
+      .where(eq(productsTable.id, id))
+      .limit(1);
+
+    if (!existingProducts) {
+      return res.status(404).json({
+        success: false,
+        message: '找不到該商品'
+      });
+    }
+
+    // 軟刪除商品
+    await db.update(productsTable)
+      .set({
+        isActive: false,
+        updatedAt: new Date()
+      })
+      .where(eq(productsTable.id, id));
+
+    res.json({
+      success: true,
+      message: '商品刪除成功'
+    });
+
+  } catch (error) {
+    console.error('[PRODUCT] 刪除商品失敗:', error);
+    res.status(500).json({
+      success: false,
+      message: '刪除商品失敗，請稍後再試'
+    });
+  }
+};
+
 export {
   getProducts,
   getProductById,
   createProduct,
-  updateProduct
+  updateProduct,
+  deleteProduct
 };
