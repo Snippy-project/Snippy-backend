@@ -1,4 +1,4 @@
-import { eq, and, desc, sql } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import { db } from '../config/db.js';
 import { usersTable } from '../models/users/usersTable.js';
 import { userQuotasTable } from '../models/users/userQuotasTable.js';
@@ -116,6 +116,44 @@ const getUserStats = async (userId) => {
   }
 };
 
+// 取得用戶配額資訊
+const getUserQuota = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const quotas = await db.select()
+      .from(userQuotasTable)
+      .where(eq(userQuotasTable.userId, userId))
+      .limit(1);
+
+    if (quotas.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: '找不到配額資訊'
+      });
+    }
+
+    const quota = quotas[0];
+
+    res.json({
+      success: true,
+      data: {
+        total: quota.totalQuota,
+        used: quota.usedQuota,
+        remaining: quota.remainingQuota,
+        usagePercentage: ((quota.usedQuota / quota.totalQuota) * 100).toFixed(1)
+      }
+    });
+
+  } catch (error) {
+    console.error('[USER] 取得配額資訊失敗:', error);
+    res.status(500).json({
+      success: false,
+      message: '取得配額資訊失敗，請稍後再試'
+    });
+  }
+};
+
 // 輔助函數：取得訂閱狀態文字
 const getSubscriptionStatusText = (status) => {
   const statusMap = {
@@ -127,5 +165,6 @@ const getSubscriptionStatusText = (status) => {
 };
 
 export {
-  getUserProfile
+  getUserProfile,
+  getUserQuota
 };
