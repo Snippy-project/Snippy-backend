@@ -197,6 +197,45 @@ const getUserSubscriptions = async (req, res) => {
   }
 };
 
+// 取得用戶自訂域名
+const getUserDomains = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    // 檢查用戶是否有自訂域名訂閱
+    const hasSubscription = await checkCustomDomainSubscription(userId);
+    
+    if (!hasSubscription) {
+      return res.json({
+        success: true,
+        data: [],
+        message: '您尚未訂閱自訂域名功能',
+        needsSubscription: true
+      });
+    }
+
+    const domains = await db.select()
+      .from(customDomainsTable)
+      .where(and(
+        eq(customDomainsTable.userId, userId),
+        eq(customDomainsTable.isActive, true)
+      ))
+      .orderBy(desc(customDomainsTable.createdAt));
+
+    res.json({
+      success: true,
+      data: domains
+    });
+
+  } catch (error) {
+    console.error('[USER] 取得自訂域名失敗:', error);
+    res.status(500).json({
+      success: false,
+      message: '取得自訂域名失敗，請稍後再試'
+    });
+  }
+};
+
 // 輔助函數：取得訂閱類型文字
 const getSubscriptionTypeText = (type) => {
   const typeMap = {
@@ -219,5 +258,6 @@ const getSubscriptionStatusText = (status) => {
 export {
   getUserProfile,
   getUserQuota,
-  getUserSubscriptions
+  getUserSubscriptions,
+  getUserDomains
 };
