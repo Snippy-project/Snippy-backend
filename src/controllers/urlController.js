@@ -128,6 +128,73 @@ const createUrl = async (req, res) => {
   }
 };
 
+// 取得用戶的短網址列表
+const getUserUrls = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 5;
+    const offset = (page - 1) * limit;
+
+    // 查詢短網址列表
+    const urls = await db.select({
+      id: urlsTable.id,
+      shortId: urlsTable.shortId,
+      originalUrl: urlsTable.originalUrl,
+      title: urlsTable.title,
+      clickCount: urlsTable.clickCount,
+      customDomain: customDomainsTable.domain,
+      createdAt: urlsTable.createdAt,
+      expiresAt: urlsTable.expiresAt,
+      isActive: urlsTable.isActive
+    })
+    .from(urlsTable)
+    .leftJoin(customDomainsTable, eq(urlsTable.customDomainId, customDomainsTable.id))
+    .where(and(
+      eq(urlsTable.userId, userId),
+      eq(urlsTable.isActive, true)
+    ))
+    .orderBy(desc(urlsTable.createdAt))
+    .limit(limit)
+    .offset(offset);
+
+    // 計算總數
+    const totalCount = await db.select({ 
+      count: sql`count(*)` 
+    })
+    .from(urlsTable)
+    .where(and(
+      eq(urlsTable.userId, userId),
+      eq(urlsTable.isActive, true)
+    ));
+
+    // 為每個 URL 加上完整的短網址
+    const urlsWithShortUrl = urls.map(url => ({
+      ...url,
+      shortUrl: buildShortUrl(url.shortId, url.customDomain)
+    }));
+
+    res.json({
+      success: true,
+      data: urlsWithShortUrl,
+      pagination: {
+        currentPage: page,
+        totalPages: Math.ceil(totalCount[0].count / limit),
+        totalCount: totalCount[0].count,
+        limit: limit
+      }
+    });
+
+  } catch (error) {
+    console.error('[URL] 取得短網址列表失敗:', error);
+    res.status(500).json({
+      success: false,
+      message: '取得短網址列表失敗，請稍後再試'
+    });
+  }
+};
+
 export {
-  createUrl
+  createUrl,
+  getUserUrls
 };
