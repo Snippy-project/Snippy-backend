@@ -194,7 +194,61 @@ const getUserUrls = async (req, res) => {
   }
 };
 
+// 取得特定短網址詳情
+const getUrlById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id;
+
+    const urls = await db.select({
+      id: urlsTable.id,
+      shortId: urlsTable.shortId,
+      originalUrl: urlsTable.originalUrl,
+      title: urlsTable.title,
+      clickCount: urlsTable.clickCount,
+      customDomain: customDomainsTable.domain,
+      createdAt: urlsTable.createdAt,
+      expiresAt: urlsTable.expiresAt,
+      isActive: urlsTable.isActive
+    })
+    .from(urlsTable)
+    .leftJoin(customDomainsTable, eq(urlsTable.customDomainId, customDomainsTable.id))
+    .where(and(
+      eq(urlsTable.id, id),
+      eq(urlsTable.userId, userId),
+      eq(urlsTable.isActive, true)
+    ))
+    .limit(1);
+
+    if (urls.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: '找不到該短網址'
+      });
+    }
+
+    const url = urls[0];
+    const shortUrl = buildShortUrl(url.shortId, url.customDomain);
+
+    res.json({
+      success: true,
+      data: {
+        ...url,
+        shortUrl
+      }
+    });
+
+  } catch (error) {
+    console.error('[URL] 取得短網址詳情失敗:', error);
+    res.status(500).json({
+      success: false,
+      message: '取得短網址詳情失敗，請稍後再試'
+    });
+  }
+};
+
 export {
   createUrl,
-  getUserUrls
+  getUserUrls,
+  getUrlById
 };
