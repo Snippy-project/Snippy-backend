@@ -1,4 +1,4 @@
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and, desc, sql } from 'drizzle-orm';
 import { db } from '../config/db.js';
 import { ordersTable } from '../models/products/ordersTable.js';
 import { productsTable } from '../models/products/productsTable.js';
@@ -280,8 +280,70 @@ const processOrderCompletion = async (order, product) => {
   }
 };
 
+// 取得用戶訂單列表
+const getUserOrders = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const offset = (page - 1) * limit;
+
+    // 查詢訂單列表
+    const orders = await db.select({
+      id: ordersTable.id,
+      orderNumber: ordersTable.orderNumber,
+      price: ordersTable.price,
+      orderStatus: ordersTable.orderStatus,
+      paidAt: ordersTable.paidAt,
+      createdAt: ordersTable.createdAt,
+      productName: productsTable.name,
+      productDescription: productsTable.description,
+      productType: productsTable.productType
+    })
+    .from(ordersTable)
+    .leftJoin(productsTable, eq(ordersTable.productId, productsTable.id))
+    .where(eq(ordersTable.userId, userId))
+    .orderBy(desc(ordersTable.createdAt))
+    .limit(limit)
+    .offset(offset);
+
+    // 計算總數
+    const totalCount = await db.select({ 
+      count: sql`count(*)` 
+    })
+    .from(ordersTable)
+    .where(eq(ordersTable.userId, userId));
+
+    // 格式化訂單資料
+    const formattedOrders = orders.map(order => ({
+      ...order,
+      priceDisplay: `$${(order.price / 100).toFixed(2)}`,
+      statusText: getOrderStatusText(order.orderStatus)
+    }));
+
+    res.json({
+      success: true,
+      data: formattedOrders,
+      pagination: {
+        currentPage: page,
+        totalPages: Math.ceil(totalCount[0].count / limit),
+        totalCount: totalCount[0].count,
+        limit: limit
+      }
+    });
+
+  } catch (error) {
+    console.error('[ORDER] 取得訂單列表失敗:', error);
+    res.status(500).json({
+      success: false,
+      message: '取得訂單列表失敗，請稍後再試'
+    });
+  }
+};
+
 export {
   createOrder,
   getPaymentPage,
-  handlePaymentCallback
+  handlePaymentCallback,
+  getUserOrders
 };
