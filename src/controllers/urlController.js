@@ -337,10 +337,61 @@ const deleteUrl = async (req, res) => {
   }
 };
 
+// 短網址重定向
+const handleRedirect = async (req, res) => {
+  try {
+    const { shortId } = req.params;
+
+    // 查詢短網址
+    const urls = await db.select()
+      .from(urlsTable)
+      .where(and(
+        eq(urlsTable.shortId, shortId),
+        eq(urlsTable.isActive, true)
+      ))
+      .limit(1);
+
+    if (urls.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: '短網址不存在或已失效'
+      });
+    }
+
+    const url = urls[0];
+
+    // 檢查是否過期
+    if (url.expiresAt && new Date() > url.expiresAt) {
+      return res.status(410).json({
+        success: false,
+        message: '短網址已過期'
+      });
+    }
+
+    // 更新點擊次數
+    await db.update(urlsTable)
+      .set({
+        clickCount: sql`click_count + 1`
+      })
+      .where(eq(urlsTable.id, url.id));
+
+    // 重定向到原始網址
+    res.redirect(301, url.originalUrl);
+
+  } catch (error) {
+    console.error('[URL] 短網址重定向失敗:', error);
+    res.status(500).json({
+      success: false,
+      message: '重定向失敗，請稍後再試'
+    });
+  }
+};
+
 export {
   createUrl,
   getUserUrls,
   getUrlById,
   updateUrl,
-  deleteUrl
+  deleteUrl,
+  handleRedirect
 };
