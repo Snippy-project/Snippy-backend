@@ -1,10 +1,10 @@
-import { eq, and, desc, sql } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import { db } from '../config/db.js';
 import { ordersTable } from '../models/products/ordersTable.js';
 import { productsTable } from '../models/products/productsTable.js';
 import { userQuotasTable } from '../models/users/userQuotasTable.js';
 import { userSubscriptionsTable } from '../models/users/userSubscriptionsTable.js';
-import { generatePaymentFormHTML, verifyEcpayCallback, simulatePayment } from '../services/ecpay/ecpayService.js';
+import { generatePaymentFormHTML, verifyEcpayCallback } from '../services/ecpay/ecpayService.js';
 
 // 創建訂單
 const createOrder = async (req, res) => {
@@ -239,6 +239,44 @@ const handlePaymentCallback = async (req, res) => {
   } catch (error) {
     console.error('[ORDER] 付款回調處理異常:', error);
     res.send('0|Exception');
+  }
+};
+
+// 處理訂單完成後的業務邏輯
+const processOrderCompletion = async (order, product) => {
+  try {
+    console.log('[ORDER] 開始處理訂單完成邏輯:', order.orderNumber);
+
+    if (product.productType === 'quota') {
+      // 配額商品：增加用戶配額
+      await db.update(userQuotasTable)
+        .set({
+          totalQuota: sql`total_quota + ${product.quotaAmount}`,
+          remainingQuota: sql`remaining_quota + ${product.quotaAmount}`
+        })
+        .where(eq(userQuotasTable.userId, order.userId));
+
+      console.log(`[ORDER] 用戶 ${order.userId} 增加配額 ${product.quotaAmount}`);
+
+    } else if (product.productType === 'custom_domain' || product.productType === 'custom_domain_yearly') {
+      // 自訂域名商品：創建訂閱記錄
+      const endDate = new Date();
+      endDate.setDate(endDate.getDate() + product.subscriptionDurationDays);
+
+      await db.insert(userSubscriptionsTable).values({
+        userId: order.userId,
+        subscriptionType: product.productType,
+        subscriptionStatus: 'active',
+        startDate: new Date(),
+        endDate: endDate
+      });
+
+      console.log(`[ORDER] 用戶 ${order.userId} 開啟訂閱 ${product.productType}`);
+    }
+
+  } catch (error) {
+    console.error('[ORDER] 處理訂單完成邏輯失敗:', error);
+    // 這裡可以加入重試機制或告警
   }
 };
 
