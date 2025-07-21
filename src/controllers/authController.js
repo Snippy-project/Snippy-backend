@@ -364,11 +364,74 @@ const forgotPassword = async (req, res) => {
   }
 };
 
+// 重設密碼
+const resetPassword = async (req, res) => {
+  try {
+    const { token } = req.params;
+    const { password } = req.body;
+
+    if (!token || !password) {
+      return res.status(400).json({
+        success: false,
+        message: '請提供 token 和新密碼'
+      });
+    }
+
+    if (password.length < 8) {
+      return res.status(400).json({
+        success: false,
+        message: '密碼長度至少需要8個字符'
+      });
+    }
+
+    // 查詢用戶
+    const [user] = await db.select()
+      .from(usersTable)
+      .where(and(
+        eq(usersTable.passwordResetToken, token),
+        gt(usersTable.passwordResetExpires, new Date())
+      ))
+      .limit(1);
+
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        message: '重設 token 無效或已過期'
+      });
+    }
+
+    // 加密新密碼
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // 更新用戶密碼
+    await db.update(usersTable)
+      .set({
+        password: hashedPassword,
+        passwordResetToken: null,
+        passwordResetExpires: null
+      })
+      .where(eq(usersTable.id, user.id));
+
+    res.json({
+      success: true,
+      message: '密碼重設成功！請使用新密碼登入'
+    });
+
+  } catch (error) {
+    console.error('[AUTH] 重設密碼失敗:', error);
+    res.status(500).json({
+      success: false,
+      message: '重設密碼失敗，請稍後再試'
+    });
+  }
+};
+
 export {
   register,
   login,
   logout,
   verifyEmail,
   resendVerification,
-  forgotPassword
+  forgotPassword,
+  resetPassword
 };
