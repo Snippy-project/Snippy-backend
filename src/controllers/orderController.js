@@ -1,8 +1,10 @@
-import { eq, and } from 'drizzle-orm';
+import { eq, and, desc, sql } from 'drizzle-orm';
 import { db } from '../config/db.js';
 import { ordersTable } from '../models/products/ordersTable.js';
 import { productsTable } from '../models/products/productsTable.js';
-import { generatePaymentFormHTML } from '../services/ecpay/ecpayService.js';
+import { userQuotasTable } from '../models/users/userQuotasTable.js';
+import { userSubscriptionsTable } from '../models/users/userSubscriptionsTable.js';
+import { generatePaymentFormHTML, verifyEcpayCallback, simulatePayment } from '../services/ecpay/ecpayService.js';
 
 // 創建訂單
 const createOrder = async (req, res) => {
@@ -172,7 +174,76 @@ const getPaymentPage = async (req, res) => {
   }
 };
 
+// 處理綠界付款回調
+const handlePaymentCallback = async (req, res) => {
+  try {
+    console.log('[ORDER] 收到綠界付款回調');
+    
+    // 處理綠界回傳資料
+    const callbackResult = verifyEcpayCallback(req.body);
+    
+    if (!callbackResult.success) {
+      console.error('[ORDER] 付款回調處理失敗:', callbackResult.message);
+      return res.send('0|Error');
+    }
+
+    const { result } = callbackResult;
+    const { merchantTradeNo } = result;
+
+    // 查詢對應的訂單
+    const orders = await db.select()
+      .from(ordersTable)
+      .leftJoin(productsTable, eq(ordersTable.productId, productsTable.id))
+      .where(eq(ordersTable.orderNumber, merchantTradeNo))
+      .limit(1);
+
+    if (orders.length === 0) {
+      console.error('[ORDER] 找不到對應的訂單:', merchantTradeNo);
+      return res.send('0|Order not found');
+    }
+
+    const order = orders[0].orders;
+    const product = orders[0].products;
+
+    // 更新訂單狀態
+    if (callbackResult.success) {
+      await db.update(ordersTable)
+        .set({
+          orderStatus: 'paid',
+          ecpayTradeNo: result.ecpayTradeNo,
+          ecpayPaymentDate: new Date(result.paymentDate),
+          ecpaySimulatePaid: result.simulatePaid,
+          ecpayCheckMacValue: result.checkMacValue,
+          paidAt: new Date()
+        })
+        .where(eq(ordersTable.id, order.id));
+
+      // 處理訂單完成後的業務邏輯
+      await processOrderCompletion(order, product);
+
+      console.log('[ORDER] 訂單付款成功:', merchantTradeNo);
+      res.send('1|OK');
+    } else {
+      await db.update(ordersTable)
+        .set({
+          orderStatus: 'failed',
+          failureReason: result.rtnMsg,
+          ecpayCheckMacValue: result.checkMacValue
+        })
+        .where(eq(ordersTable.id, order.id));
+
+      console.log('[ORDER] 訂單付款失敗:', merchantTradeNo, result.rtnMsg);
+      res.send('1|OK');
+    }
+
+  } catch (error) {
+    console.error('[ORDER] 付款回調處理異常:', error);
+    res.send('0|Exception');
+  }
+};
+
 export {
   createOrder,
-  getPaymentPage
+  getPaymentPage,
+  handlePaymentCallback
 };
