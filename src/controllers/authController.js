@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '../config/db.js';
 import { usersTable } from '../models/users/usersTable.js';
 import { userQuotasTable } from '../models/users/userQuotasTable.js';
+import { loginUser } from '../services/auth/authService.js';
 import { sendVerificationEmail } from '../services/auth/emailService.js';
 
 // 註冊用戶
@@ -102,6 +103,60 @@ const register = async (req, res) => {
   }
 };
 
+// 用戶登入
+const login = async (req, res) => {
+  try {
+    const { email, password, rememberMe } = req.body;
+
+    // 基本驗證
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: '請提供信箱和密碼'
+      });
+    }
+
+    // 查詢用戶
+    const [user] = await db.select()
+      .from(usersTable)
+      .where(eq(usersTable.email, email))
+      .limit(1);
+
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: '信箱或密碼錯誤'
+      });
+    }
+
+    // 驗證密碼
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid) {
+      return res.status(401).json({
+        success: false,
+        message: '信箱或密碼錯誤'
+      });
+    }
+
+    // 使用 authService 處理登入
+    const loginResult = await loginUser(res, user, { rememberMe });
+
+    if (loginResult.success) {
+      res.json(loginResult);
+    } else {
+      res.status(401).json(loginResult);
+    }
+
+  } catch (error) {
+    console.error('[AUTH] 登入失敗:', error);
+    res.status(500).json({
+      success: false,
+      message: '登入失敗，請稍後再試'
+    });
+  }
+};
+
 export {
-  register
+  register,
+  login
 };
