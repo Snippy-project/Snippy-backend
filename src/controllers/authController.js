@@ -426,6 +426,67 @@ const resetPassword = async (req, res) => {
   }
 };
 
+// 取得當前用戶資訊
+const me = async (req, res) => {
+  try {
+    const authResult = await verifyAuth(req, res);
+    
+    if (!authResult.success) {
+      return res.status(401).json(authResult);
+    }
+
+    // 查詢用戶完整資料和配額
+    const [user] = await db.select({
+      id: usersTable.id,
+      username: usersTable.username,
+      email: usersTable.email,
+      role: usersTable.role,
+      status: usersTable.status,
+      isVerifiedEmail: usersTable.isVerifiedEmail,
+      createdAt: usersTable.createdAt,
+      totalQuota: userQuotasTable.totalQuota,
+      usedQuota: userQuotasTable.usedQuota,
+      remainingQuota: userQuotasTable.remainingQuota
+    })
+    .from(usersTable)
+    .leftJoin(userQuotasTable, eq(usersTable.id, userQuotasTable.userId))
+    .where(eq(usersTable.id, authResult.user.id))
+    .limit(1);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: '找不到用戶資料'
+      });
+    }
+
+    res.json({
+      success: true,
+      user: {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        role: user.role,
+        status: user.status,
+        isVerifiedEmail: user.isVerifiedEmail,
+        createdAt: user.createdAt,
+        quota: {
+          total: user.totalQuota,
+          used: user.usedQuota,
+          remaining: user.remainingQuota
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('[AUTH] 取得用戶資料失敗:', error);
+    res.status(500).json({
+      success: false,
+      message: '取得用戶資料失敗，請稍後再試'
+    });
+  }
+};
+
 export {
   register,
   login,
@@ -433,5 +494,6 @@ export {
   verifyEmail,
   resendVerification,
   forgotPassword,
-  resetPassword
+  resetPassword,
+  me
 };
