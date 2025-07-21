@@ -3,8 +3,8 @@ import { eq, and, gt } from 'drizzle-orm';
 import { db } from '../config/db.js';
 import { usersTable } from '../models/users/usersTable.js';
 import { userQuotasTable } from '../models/users/userQuotasTable.js';
-import { loginUser, logoutUser } from '../services/auth/authService.js';
-import { sendVerificationEmail } from '../services/auth/emailService.js';
+import { loginUser, logoutUser, verifyAuth } from '../services/auth/authService.js';
+import { sendVerificationEmail, sendPasswordResetEmail } from '../services/auth/emailService.js';
 
 // 註冊用戶
 const register = async (req, res) => {
@@ -227,9 +227,84 @@ const verifyEmail = async (req, res) => {
   }
 };
 
+// 重新發送驗證信
+const resendVerification = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: '請提供信箱'
+      });
+    }
+
+    // 查詢用戶
+    const [user] = await db.select()
+      .from(usersTable)
+      .where(eq(usersTable.email, email))
+      .limit(1);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: '找不到此信箱對應的用戶'
+      });
+    }
+
+    if (user.isVerifiedEmail) {
+      return res.status(400).json({
+        success: false,
+        message: '此信箱已經驗證過了'
+      });
+    }
+
+    // 檢查是否過於頻繁發送（5分鐘內只能發送一次）
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+    if (user.lastVerificationEmailSent && user.lastVerificationEmailSent > fiveMinutesAgo) {
+      return res.status(429).json({
+        success: false,
+        message: '請等待5分鐘後再重新發送驗證信'
+      });
+    }
+
+    // 發送驗證信
+    const emailResult = await sendVerificationEmail(user.email, user.username);
+
+    if (emailResult.success) {
+      // 更新用戶的驗證 token
+      await db.update(usersTable)
+        .set({
+          emailVerificationToken: emailResult.token,
+          emailVerificationExpires: new Date(Date.now() + 24 * 60 * 60 * 1000),
+          lastVerificationEmailSent: new Date()
+        })
+        .where(eq(usersTable.id, user.id));
+
+      res.json({
+        success: true,
+        message: '驗證信已重新發送，請檢查您的信箱'
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        message: '驗證信發送失敗，請稍後再試'
+      });
+    }
+
+  } catch (error) {
+    console.error('[AUTH] 重新發送驗證信失敗:', error);
+    res.status(500).json({
+      success: false,
+      message: '重新發送驗證信失敗，請稍後再試'
+    });
+  }
+};
+
 export {
   register,
   login,
   logout,
-  verifyEmail
+  verifyEmail,
+  resendVerification
 };
