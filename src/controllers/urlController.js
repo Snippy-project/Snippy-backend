@@ -293,9 +293,54 @@ const updateUrl = async (req, res) => {
   }
 };
 
+// 刪除短網址（軟刪除）
+const deleteUrl = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id;
+
+    // 檢查短網址是否存在且屬於當前用戶
+    const existingUrls = await db.select()
+      .from(urlsTable)
+      .where(and(
+        eq(urlsTable.id, id),
+        eq(urlsTable.userId, userId),
+        eq(urlsTable.isActive, true)
+      ))
+      .limit(1);
+
+    if (existingUrls.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: '找不到該短網址'
+      });
+    }
+
+    // 軟刪除
+    await db.update(urlsTable)
+      .set({
+        isActive: false
+      })
+      .where(eq(urlsTable.id, id));
+
+    res.json({
+      success: true,
+      message: '短網址刪除成功'
+    });
+
+  } catch (error) {
+    console.error('[URL] 刪除短網址失敗:', error);
+    res.status(500).json({
+      success: false,
+      message: '刪除短網址失敗，請稍後再試'
+    });
+  }
+};
+
 export {
   createUrl,
   getUserUrls,
   getUrlById,
-  updateUrl
+  updateUrl,
+  deleteUrl
 };
