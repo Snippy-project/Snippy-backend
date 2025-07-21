@@ -236,6 +236,78 @@ const getUserDomains = async (req, res) => {
   }
 };
 
+// 新增自訂域名
+const addCustomDomain = async (req, res) => {
+  try {
+    const { domain } = req.body;
+    const userId = req.user.id;
+
+    // 驗證必要欄位
+    if (!domain) {
+      return res.status(400).json({
+        success: false,
+        message: '請提供域名'
+      });
+    }
+
+    // 檢查用戶是否有自訂域名訂閱
+    const hasSubscription = await checkCustomDomainSubscription(userId);
+    
+    if (!hasSubscription) {
+      return res.status(403).json({
+        success: false,
+        message: '您需要先訂閱自訂域名功能',
+        needsSubscription: true
+      });
+    }
+
+    // 簡單的域名格式驗證
+    const domainRegex = /^(?!\-)([a-zA-Z0-9\-]{1,63}\.)+[a-zA-Z]{2,}$/;
+    if (!domainRegex.test(domain)) {
+      return res.status(400).json({
+        success: false,
+        message: '請提供有效的域名格式'
+      });
+    }
+
+    // 檢查域名是否已被使用
+    const existingDomains = await db.select()
+      .from(customDomainsTable)
+      .where(and(
+        eq(customDomainsTable.domain, domain),
+        eq(customDomainsTable.isActive, true)
+      ))
+      .limit(1);
+
+    if (existingDomains.length > 0) {
+      return res.status(409).json({
+        success: false,
+        message: '此域名已被使用'
+      });
+    }
+
+    // 新增域名
+    const newDomain = await db.insert(customDomainsTable).values({
+      userId,
+      domain,
+      isActive: true
+    }).returning();
+
+    res.status(201).json({
+      success: true,
+      message: '自訂域名新增成功',
+      data: newDomain[0]
+    });
+
+  } catch (error) {
+    console.error('[USER] 新增自訂域名失敗:', error);
+    res.status(500).json({
+      success: false,
+      message: '新增自訂域名失敗，請稍後再試'
+    });
+  }
+};
+
 // 輔助函數：取得訂閱類型文字
 const getSubscriptionTypeText = (type) => {
   const typeMap = {
@@ -259,5 +331,6 @@ export {
   getUserProfile,
   getUserQuota,
   getUserSubscriptions,
-  getUserDomains
+  getUserDomains,
+  addCustomDomain
 };
