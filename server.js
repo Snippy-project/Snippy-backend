@@ -1,5 +1,7 @@
 import express from 'express';
 import dotenv from 'dotenv';
+import cors from 'cors';
+import { corsOptions } from './src/config/cors.js';
 
 dotenv.config();
 
@@ -12,6 +14,7 @@ if (!process.env.COOKIE_SECRET || !process.env.JWT_SECRET) {
   process.exit(1);
 }
 
+app.use(cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -20,9 +23,6 @@ app.get('/', (req, res) => {
   res.json({
     success: true,
     message: '短網址服務 API',
-    endpoints: {
-      health: '/api/health'
-    },
     version: '1.0.0',
     timestamp: new Date().toISOString()
   });
@@ -44,9 +44,6 @@ app.use((req, res) => {
     success: false,
     error: "找不到該路由",
     message: `路徑 ${req.originalUrl} 不存在`,
-    availableEndpoints: [
-      '/api/health'
-    ]
   });
 });
 
