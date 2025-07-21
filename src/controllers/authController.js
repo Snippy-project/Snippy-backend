@@ -1,10 +1,10 @@
 import bcrypt from 'bcrypt';
-import { eq } from 'drizzle-orm';
+import { eq, and, gt } from 'drizzle-orm';
 import { db } from '../config/db.js';
 import { usersTable } from '../models/users/usersTable.js';
 import { userQuotasTable } from '../models/users/userQuotasTable.js';
-import { loginUser } from '../services/auth/authService.js';
-import { sendVerificationEmail } from '../services/auth/emailService.js';
+import { loginUser, logoutUser, verifyAuth } from '../services/auth/authService.js';
+import { sendVerificationEmail, sendPasswordResetEmail } from '../services/auth/emailService.js';
 
 // 註冊用戶
 const register = async (req, res) => {
@@ -156,7 +156,22 @@ const login = async (req, res) => {
   }
 };
 
+// 用戶登出
+const logout = async (req, res) => {
+  try {
+    const logoutResult = await logoutUser(req, res);
+    res.json(logoutResult);
+  } catch (error) {
+    console.error('[AUTH] 登出失敗:', error);
+    res.status(500).json({
+      success: false,
+      message: '登出失敗，請稍後再試'
+    });
+  }
+};
+
 export {
   register,
-  login
+  login,
+  logout
 };
