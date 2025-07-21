@@ -82,7 +82,64 @@ const getProductById = async (req, res) => {
   }
 };
 
+// 創建商品（管理員）
+const createProduct = async (req, res) => {
+  try {
+    const { name, description, quotaAmount, price, productType, subscriptionDurationDays } = req.body;
+
+    // 驗證必要欄位
+    if (!name || !description || price === undefined || !productType) {
+      return res.status(400).json({
+        success: false,
+        message: '請提供所有必要欄位：name, description, price, productType'
+      });
+    }
+
+    // 驗證商品類型
+    const validTypes = ['quota', 'custom_domain', 'custom_domain_yearly'];
+    if (!validTypes.includes(productType)) {
+      return res.status(400).json({
+        success: false,
+        message: '無效的商品類型'
+      });
+    }
+
+    // 驗證價格
+    if (price < 0) {
+      return res.status(400).json({
+        success: false,
+        message: '價格不能為負數'
+      });
+    }
+
+    // 建立商品
+    const newProduct = await db.insert(productsTable).values({
+      name,
+      description,
+      quotaAmount: quotaAmount || 0,
+      price,
+      productType,
+      subscriptionDurationDays: subscriptionDurationDays || null,
+      isActive: true
+    }).returning();
+
+    res.status(201).json({
+      success: true,
+      data: newProduct[0],
+      message: '商品創建成功'
+    });
+
+  } catch (error) {
+    console.error('[PRODUCT] 創建商品失敗:', error);
+    res.status(500).json({
+      success: false,
+      message: '創建商品失敗，請稍後再試'
+    });
+  }
+};
+
 export {
   getProducts,
-  getProductById
+  getProductById,
+  createProduct
 };
