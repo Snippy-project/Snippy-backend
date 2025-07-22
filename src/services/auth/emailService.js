@@ -20,8 +20,8 @@ const generateToken = () => {
 };
 
 const buildUrl = (type, token) => {
-  const baseUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-  return `${baseUrl}/api/auth/${type}/${token}`;
+  const baseUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+  return `${baseUrl}/${type}?token=${token}`;
 };
 
 const getSimpleTemplate = (title, content, buttonText, buttonUrl) => {

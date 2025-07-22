@@ -162,7 +162,7 @@ const logout = async (req, res) => {
 // 驗證信箱
 const verifyEmail = async (req, res) => {
   try {
-    const { token } = req.params;
+    const token = req.params.token || req.query.token;
 
     if (!token) {
       return res.status(400).json({
