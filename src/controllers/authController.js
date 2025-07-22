@@ -346,7 +346,7 @@ const forgotPassword = async (req, res) => {
 // 重設密碼
 const resetPassword = async (req, res) => {
   try {
-    const { token } = req.params;
+    const token = req.params.token || req.query.token;
     const { password } = req.body;
 
     if (!token || !password) {
