@@ -13,7 +13,7 @@ const cookieConfig = {
 	// 主要認證 token（包含用戶 ID、角色等敏感資訊）
   auth_token: {
     httpOnly: true,                                   
-    secure: process.env.NODE_ENV === 'production',     
+    secure: true,     
     sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',                               
     maxAge: 2 * 60 * 60 * 1000,                
     path: '/',                                        
@@ -23,7 +23,7 @@ const cookieConfig = {
   // 用戶顯示資訊（非敏感資料，供前端顯示使用）
   user_display: {
     httpOnly: false,                                  
-    secure: process.env.NODE_ENV === 'production',     
+    secure: true,     
     sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',                                
     maxAge: 2 * 60 * 60 * 1000,                          
     path: '/',
@@ -33,7 +33,7 @@ const cookieConfig = {
   // 記住登入狀態
   remember_me: {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: true,
     sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
     maxAge: 7 * 24 * 60 * 60 * 1000,       
     path: '/',
@@ -44,7 +44,7 @@ const cookieConfig = {
 // 清除 Cookie 的配置（設定過期時間為過去）
 const clearCookieConfig = {
   httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
+  secure: true,
   sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
   path: '/',
   expires: new Date(0)
