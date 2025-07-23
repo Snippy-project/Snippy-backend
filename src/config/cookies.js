@@ -14,7 +14,7 @@ const cookieConfig = {
   auth_token: {
     httpOnly: true,                                   
     secure: process.env.NODE_ENV === 'production',     
-    sameSite: 'strict',                               
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',                               
     maxAge: 2 * 60 * 60 * 1000,                
     path: '/',                                        
     signed: true                                      
@@ -24,7 +24,7 @@ const cookieConfig = {
   user_display: {
     httpOnly: false,                                  
     secure: process.env.NODE_ENV === 'production',     
-    sameSite: 'strict',                                
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',                                
     maxAge: 2 * 60 * 60 * 1000,                          
     path: '/',
     signed: false                                     
@@ -34,7 +34,7 @@ const cookieConfig = {
   remember_me: {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
     maxAge: 7 * 24 * 60 * 60 * 1000,       
     path: '/',
     signed: true
@@ -45,7 +45,7 @@ const cookieConfig = {
 const clearCookieConfig = {
   httpOnly: true,
   secure: process.env.NODE_ENV === 'production',
-  sameSite: 'strict',
+  sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
   path: '/',
   expires: new Date(0)
 };
