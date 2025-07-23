@@ -96,7 +96,7 @@ const checkUrlSafety = (url) => {
 
 // 組成完整的短網址
 const buildShortUrl = (shortId, customDomain = null) => {
-  const baseUrl = process.env.BACKEND_URL || 'http://localhost:3000';
+  const baseUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
   
   if (customDomain) {
     return `https://${customDomain}/${shortId}`;
